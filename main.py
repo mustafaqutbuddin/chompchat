@@ -1,102 +1,23 @@
-from fastapi import FastAPI, Form
-from fastapi.responses import PlainTextResponse
-from twilio.twiml.messaging_response import MessagingResponse
-from openai import OpenAI
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from dotenv import load_dotenv
-from fastapi.responses import HTMLResponse
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-from voice_agent import router as voice_router
 from utils import save_order, send_order_email
-from fastapi import Request, Header
-from fastapi.responses import JSONResponse
-from call_vapi import router as vapi_router
-import os
+import json, os, datetime
 
-import json
-import os
-import datetime
-
-# Load environment variables
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
-app.include_router(voice_router)
-app.include_router(vapi_router)
 
 ORDERS_FILE = "orders.json"
 
-def save_order(from_number: str, message: str, ai_reply: str):
-    order_data = {
-        "timestamp": datetime.datetime.utcnow().isoformat(),
-        "from": from_number,
-        "message": message,
-        "response": ai_reply
-    }
-
-    if os.path.exists(ORDERS_FILE):
-        with open(ORDERS_FILE, "r") as f:
-            orders = json.load(f)
-    else:
-        orders = []
-
-    orders.append(order_data)
-
-    with open(ORDERS_FILE, "w") as f:
-        json.dump(orders, f, indent=2)
-
 @app.post("/sms", response_class=PlainTextResponse)
 async def sms_reply(Body: str = Form(...), From: str = Form(...)):
-    print(f"Incoming from {From}: {Body}")
-
-    # Map known restaurant numbers to IDs
-    restaurant_map = {
-        "+1978775898": "genzburger"  # 🔁 Replace with Gen Z Burger's Twilio number
-    }
-
-    # Default to genzburger for now
-    restaurant_id = restaurant_map.get(From, "genzburger")
-    menu_path = f"static/menus/{restaurant_id}.json"
-
-    try:
-        with open(menu_path, "r") as f:
-            menu = json.load(f)
-    except Exception as e:
-        print("Failed to load menu:", e)
-        return PlainTextResponse("Sorry, the menu is currently unavailable.", status_code=500)
-
-    prompt = f"""
-You are a friendly and casual AI order assistant for Gen Z Burger.
-Speak like a cool, laid-back human — not too formal.
-Respond in 1–2 short sentences max.
-
-Customer said: "{SpeechResult}"
-Current order so far: {session["items"]}
-
-If their message sounds like a menu item, confirm it.
-If they're done ordering, summarize and ask: 'Is that correct?'
-Otherwise, ask naturally if they want to add more.
-"""
-
-    try:
-        completion = client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        reply = completion.choices[0].message.content.strip()
-        save_order(From, Body, reply)
-        send_order_email(From, Body, reply)
-
-        twiml = MessagingResponse()
-        twiml.message(reply)
-        return str(twiml)
-
-    except Exception as e:
-        print("OpenAI error:", e)
-        return PlainTextResponse("Oops, something went wrong. Please try again.", status_code=500)
-
+    # If you're still supporting SMS flow
+    save_order(From, Body, "Received via SMS")
+    send_order_email(From, Body, "Received via SMS")
+    return "Thanks for your order! We'll be in touch soon."
 
 @app.get("/orders", response_class=HTMLResponse)
 async def view_orders():
@@ -106,54 +27,32 @@ async def view_orders():
     else:
         orders = []
 
-    # Build basic HTML
     html = """
     <html>
-    <head>
-        <title>Gen Z Burger Orders</title>
-        <meta http-equiv="refresh" content="10"> <!-- Auto refresh every 10s -->
-        <style>
-            body { font-family: sans-serif; padding: 2rem; background: #fefefe; }
-            h2 { margin-top: 2rem; }
-            .order { background: #f1f1f1; padding: 1rem; margin-bottom: 1rem; border-radius: 8px; }
-            .order p { margin: 0.3rem 0; }
-        </style>
-    </head>
-    <body>
-        <h1>📋 Gen Z Burger - Live Orders</h1>
+    <head><title>Orders</title></head>
+    <body><h1>Gen Z Burger - Orders</h1>
     """
-
-    for order in reversed(orders[-20:]):  # show latest 20
+    for order in reversed(orders[-20:]):
         html += f"""
-        <div class="order">
-            <p><strong>Time:</strong> {order["timestamp"]}</p>
-            <p><strong>From:</strong> {order["from"]}</p>
-            <p><strong>Message:</strong> {order["message"]}</p>
-            <p><strong>AI Reply:</strong> {order["response"]}</p>
-        </div>
+        <div>
+            <p><strong>Time:</strong> {order['timestamp']}</p>
+            <p><strong>From:</strong> {order['from']}</p>
+            <p><strong>Message:</strong> {order['message']}</p>
+            <p><strong>AI Reply:</strong> {order['response']}</p>
+        </div><hr>
         """
-
     html += "</body></html>"
     return HTMLResponse(content=html)
 
-def send_order_email(from_number, message, reply):
-    try:
-        email_body = f"""
-        <p><strong>New Order from:</strong> {from_number}</p>
-        <p><strong>Message:</strong> {message}</p>
-        <p><strong>AI Reply:</strong> {reply}</p>
-        <p><em>Check your dashboard for full order list.</em></p>
-        """
+@app.post("/vapi/order")
+async def vapi_webhook(request: Request):
+    data = await request.json()
+    caller = data.get("phone", {}).get("number", "unknown")
+    messages = data.get("messages", [])
+    latest_msg = messages[-1]["content"] if messages else ""
 
-        email = Mail(
-            from_email=os.getenv("ALERT_EMAIL_FROM"),
-            to_emails=os.getenv("ALERT_EMAIL_TO"),
-            subject="📥 New Order Received - Gen Z Burger",
-            html_content=email_body
-        )
+    save_order(caller, latest_msg, "Handled by Vapi Assistant")
+    send_order_email(caller, latest_msg, "Handled by Vapi Assistant")
 
-        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
-        sg.send(email)
-        print("✅ Order email sent")
-    except Exception as e:
-        print("❌ Failed to send email:", e)
+    # Don't respond with anything. Vapi takes care of replies.
+    return {"status": "ok"}
