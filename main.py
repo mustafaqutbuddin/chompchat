@@ -8,6 +8,9 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from voice_agent import router as voice_router
 from utils import save_order, send_order_email
+from fastapi import Request, Header
+from fastapi.responses import JSONResponse
+import os
 
 import json
 import os
@@ -62,16 +65,17 @@ async def sms_reply(Body: str = Form(...), From: str = Form(...)):
         return PlainTextResponse("Sorry, the menu is currently unavailable.", status_code=500)
 
     prompt = f"""
-You are the AI ordering assistant for Gen Z Burger in Langley, BC.
+You are a friendly and casual AI order assistant for Gen Z Burger.
+Speak like a cool, laid-back human — not too formal.
+Respond in 1–2 short sentences max.
 
-Here is the menu:
+Customer said: "{SpeechResult}"
+Current order so far: {session["items"]}
 
-{json.dumps(menu, indent=2)}
-
-When a customer sends a message, understand their order and confirm what they want in a friendly, helpful tone.
-
-Customer: {Body}
-AI:"""
+If their message sounds like a menu item, confirm it.
+If they're done ordering, summarize and ask: 'Is that correct?'
+Otherwise, ask naturally if they want to add more.
+"""
 
     try:
         completion = client.chat.completions.create(
@@ -151,3 +155,27 @@ def send_order_email(from_number, message, reply):
         print("✅ Order email sent")
     except Exception as e:
         print("❌ Failed to send email:", e)
+
+@app.post("/vapi/order")
+async def vapi_order_handler(request: Request, authorization: str = Header(None)):
+    # Optional: Validate Secret Token
+    expected_token = os.getenv("VAPI_SECRET")
+    if expected_token and authorization != f"Bearer {expected_token}":
+        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
+
+    data = await request.json()
+    print("📞 Incoming Vapi payload:", data)
+
+    # Extract latest user message
+    messages = data.get("messages", [])
+    user_input = messages[-1]["content"] if messages else ""
+
+    # Naive order detection for demo
+    if "zingster" in user_input.lower():
+        reply = "Nice pick! One Zingster burger added. Want anything else?"
+    elif "done" in user_input.lower() or "that's it" in user_input.lower():
+        reply = "Awesome! Your order is confirmed. It'll be ready shortly. Thanks!"
+    else:
+        reply = "Got it. What else can I get for you?"
+
+    return {"reply": reply}
