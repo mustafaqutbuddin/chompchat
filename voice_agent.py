@@ -2,7 +2,7 @@ from fastapi import APIRouter, Form
 from fastapi.responses import Response
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from openai import OpenAI
-from main import save_order, send_order_email  # reuse SMS functions
+from utils import save_order, send_order_email
 import os
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
