@@ -12,7 +12,7 @@ router = APIRouter()
 # Very basic in-memory session tracker
 voice_session_store = {}
 
-@router.post("/voice")
+@router.api_route("/voice", methods=["GET", "POST"])
 async def start_call():
     response = VoiceResponse()
     gather = Gather(input='speech', action='/process_voice', method='POST', timeout=5)
