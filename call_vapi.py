@@ -1,30 +1,54 @@
-import requests
-import os
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+import json, os
+from difflib import get_close_matches
 
-VAPI_API_KEY = os.getenv("VAPI_API_KEY")
+router = APIRouter()
 
-headers = {
-    "Authorization": f"Bearer {VAPI_API_KEY}",
-    "Content-Type": "application/json"
-}
+session_store = {}
 
-data = {
-    "phone_number": "+1xxxxxxxxxx",  # 👈 customer's number
-    "voice": "nova",  # or try 'paige', 'dave', etc.
-    "assistant": {
-        "prompt": """
-You are an AI voice assistant for Gen Z Burger. Take orders for burgers, sides, drinks. Be friendly, brief, and casual.
-When the order is complete, confirm it.
-""",
-        "model": "gpt-4",
-        "temperature": 0.7,
-        "transient": True
-    },
-    "actions": {
-        "conversation_end_webhook": "https://yourdomain.com/vapi/order"
-    }
-}
+def load_menu():
+    path = "static/menus/genzburger.json"
+    with open(path, "r") as f:
+        data = json.load(f)
 
-response = requests.post("https://api.vapi.ai/v1/calls", headers=headers, json=data)
-print(response.status_code)
-print(response.json())
+    flat_items = []
+    for category, items in data.items():
+        flat_items.extend(items)
+    return flat_items
+
+MENU_ITEMS = load_menu()
+
+@router.post("/vapi/order")
+async def vapi_order_handler(request: Request):
+    data = await request.json()
+    caller = data.get("phone", {}).get("number", "unknown")
+    messages = data.get("messages", [])
+    user_input = messages[-1]["content"] if messages else ""
+
+    print(f"📞 {caller} said: {user_input}")
+
+    session = session_store.get(caller, {"items": []})
+    order = session["items"]
+
+    done_words = ["that's all", "done", "no thanks", "nothing else", "i'm good", "that's it"]
+
+    if any(phrase in user_input.lower() for phrase in done_words):
+        if not order:
+            return JSONResponse(content={"reply": "You haven’t ordered anything yet. Want to try?"})
+
+        summary = ", ".join(order)
+        reply = f"Perfect! Your order is: {summary}. It'll be ready soon. Thanks for calling Gen Z Burger!"
+        session_store.pop(caller, None)
+        return JSONResponse(content={"reply": reply})
+
+    # Try fuzzy match
+    matches = get_close_matches(user_input.lower(), [item.lower() for item in MENU_ITEMS], n=1, cutoff=0.6)
+    if matches:
+        matched = next(item for item in MENU_ITEMS if item.lower() == matches[0])
+        order.append(matched)
+        session["items"] = order
+        session_store[caller] = session
+        return JSONResponse(content={"reply": f"Got it — {matched}. Anything else you'd like?"})
+    else:
+        return JSONResponse(content={"reply": "Hmm, I didn’t quite catch that. Can you repeat it?"})
