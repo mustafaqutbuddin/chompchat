@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from fastapi.responses import HTMLResponse
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+from voice_agent import router as voice_router
+
 import json
 import os
 import datetime
@@ -15,6 +17,7 @@ load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
+app.include_router(voice_router)
 
 ORDERS_FILE = "orders.json"
 
@@ -78,7 +81,7 @@ AI:"""
         reply = completion.choices[0].message.content.strip()
         save_order(From, Body, reply)
         send_order_email(From, Body, reply)
-        
+
         twiml = MessagingResponse()
         twiml.message(reply)
         return str(twiml)
