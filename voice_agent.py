@@ -11,7 +11,6 @@ router = APIRouter()
 
 voice_session_store = {}
 
-# Alias map to fix common mishearings
 ALIAS_MAP = {
     "gangster": "Zingster",
     "ring store": "Zingster",
@@ -25,12 +24,9 @@ ALIAS_MAP = {
 
 def fuzzy_match_menu_item(text):
     cleaned = text.lower()
-
-    # Try manual alias fix first
     for alias, actual in ALIAS_MAP.items():
         if alias in cleaned:
             return actual
-
     menu_items = [
         "Zingster", "Cruncho", "Thicc Beef", "Mango Shake",
         "Fries", "Poutine", "Chicken Tikka Rice", "Peri Peri Rice Platter",
@@ -59,12 +55,15 @@ async def start_call():
 async def process_voice(SpeechResult: str = Form(...), From: str = Form(...)):
     print(f"📞 From {From} said:", SpeechResult)
 
+    # Done phrases — auto confirm and hang up
+    done_words = ["yes", "yeah", "that's it", "that’s it", "that's all", "done", "i’m good", "nothing else", "thank you"]
+
     session = voice_session_store.get(From, {"items": [], "stage": "ordering"})
 
-    # Final confirmation
-    if session["stage"] == "confirming" and "yes" in SpeechResult.lower():
+    # If user says something like "yes" or "that's it" at any time
+    if any(phrase in SpeechResult.lower() for phrase in done_words):
         item_summary = ", ".join(session["items"])
-        final_reply = f"Awesome! Your order for {item_summary} is confirmed. Catch you later!"
+        final_reply = f"Perfect! Your order for {item_summary} is confirmed. Thanks for calling Gen Z Burger!"
 
         save_order(From, item_summary, final_reply)
         send_order_email(From, item_summary, final_reply)
@@ -75,26 +74,19 @@ async def process_voice(SpeechResult: str = Form(...), From: str = Form(...)):
         response.hangup()
         return Response(content=str(response), media_type="application/xml")
 
-    # Match misheard items
+    # Fuzzy match the item
     cleaned_input = fuzzy_match_menu_item(SpeechResult)
     session["items"].append(cleaned_input)
+    voice_session_store[From] = session
 
-    # Smart confirmation detection
-    done_words = ["that's it", "done", "no, that’s all", "that’s all", "i’m good", "nothing else"]
-    if any(done_word in SpeechResult.lower() for done_word in done_words) or len(session["items"]) >= 2:
-        ask_confirmation = True
-    else:
-        ask_confirmation = False
-
+    # Simple and fast GPT prompt
     prompt = f"""
-You are a friendly Gen Z Burger order assistant. Talk like a real, casual person.
+You're a casual Gen Z Burger assistant. Talk chill and helpful.
 
-Customer just said: "{SpeechResult}"
-Matched item: "{cleaned_input}"
-Order so far: {session['items']}
+Customer said: "{SpeechResult}"
+Current order: {session['items']}
 
-{"Summarize the order and ask 'Is that correct?'" if ask_confirmation else "Acknowledge the item and ask if they want anything else."}
-Limit response to 1–2 casual, friendly lines.
+Reply in 1 short sentence. Be natural.
 """
 
     try:
@@ -106,21 +98,14 @@ Limit response to 1–2 casual, friendly lines.
         reply = completion.choices[0].message.content.strip()
         print("🤖 GPT reply:", reply)
 
-        if "is that correct" in reply.lower():
-            session["stage"] = "confirming"
-
-        voice_session_store[From] = session
-
         response = VoiceResponse()
         response.say(reply, voice="Polly.Joanna", language="en-US")
-        response.pause(length=1)
         gather = Gather(input='speech', action='/process_voice', method='POST', timeout=5)
-        gather.say("You can say yes to confirm, or add more items.", voice="Polly.Joanna", language="en-US")
         response.append(gather)
         return Response(content=str(response), media_type="application/xml")
 
     except Exception as e:
         print("❌ GPT error:", e)
         fallback = VoiceResponse()
-        fallback.say("Sorry, something glitched. Try again in a bit.", voice="Polly.Joanna", language="en-US")
+        fallback.say("Sorry, something glitched. Try again soon.", voice="Polly.Joanna", language="en-US")
         return Response(content=str(fallback), media_type="application/xml")
