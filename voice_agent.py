@@ -2,6 +2,7 @@ from fastapi import APIRouter, Form
 from fastapi.responses import Response
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from openai import OpenAI
+from main import save_order, send_order_email  # reuse SMS functions
 import os
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -26,15 +27,33 @@ async def process_voice(SpeechResult: str = Form(...), From: str = Form(...)):
     print(f"📞 From {From} said:", SpeechResult)
 
     # Get or create session
-    session = voice_session_store.get(From, {"items": []})
+    session = voice_session_store.get(From, {"items": [], "stage": "ordering"})
+
+    # If user confirms, finalize order
+    if session["stage"] == "confirming" and "yes" in SpeechResult.lower():
+        item_summary = ", ".join(session["items"])
+        final_reply = f"Thank you! Your order for {item_summary} is confirmed. Goodbye!"
+
+        save_order(From, item_summary, final_reply)
+        send_order_email(From, item_summary, final_reply)
+        voice_session_store.pop(From, None)
+
+        response = VoiceResponse()
+        response.say(final_reply)
+        response.hangup()
+        return Response(content=str(response), media_type="application/xml")
+
+    # Else, continue collecting items
+    session["items"].append(SpeechResult)
 
     prompt = f"""
-You are an AI voice assistant for Gen Z Burger in Langley, BC.
-The caller said: "{SpeechResult}"
-Order so far: {session['items']}
+You are an AI assistant helping customers place food orders at Gen Z Burger.
+Here is the order so far: {session['items']}
 
-Reply in a helpful, casual tone. Confirm items, suggest add-ons, or ask for clarification.
-Limit to 1–2 short sentences only.
+The caller said: "{SpeechResult}"
+
+If the customer seems done, summarize the order and ask: 'Is that correct?'
+Otherwise, ask what else they'd like in a friendly tone.
 """
 
     try:
@@ -44,23 +63,25 @@ Limit to 1–2 short sentences only.
             timeout=5
         )
         reply = completion.choices[0].message.content.strip()
+        print("🤖 GPT reply:", reply)
 
-        # Save message to session
-        session['items'].append(SpeechResult)
+        # Update stage if bot is asking for confirmation
+        if "is that correct" in reply.lower():
+            session["stage"] = "confirming"
+
         voice_session_store[From] = session
-
-        print("🤖 AI Response:", reply)
 
         response = VoiceResponse()
         response.say(reply)
-        # Re-gather input after saying reply
+
         gather = Gather(input='speech', action='/process_voice', method='POST', timeout=5)
-        gather.say("You can say more or confirm your order.")
+        gather.say("You can say yes to confirm, or continue your order.")
         response.append(gather)
+
         return Response(content=str(response), media_type="application/xml")
 
     except Exception as e:
-        print("❌ Error in voice GPT:", e)
+        print("❌ GPT error:", e)
         fallback = VoiceResponse()
-        fallback.say("Sorry, something went wrong. Please try again later.")
+        fallback.say("Sorry, I had trouble understanding. Please try again later.")
         return Response(content=str(fallback), media_type="application/xml")
