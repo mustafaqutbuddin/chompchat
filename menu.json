@@ -1,0 +1,6 @@
+{
+    "burgers": ["Cheeseburger", "Veggie Burger", "Bacon Double Burger"],
+    "sides": ["Fries", "Onion Rings", "Salad"],
+    "drinks": ["Coke", "Sprite", "Water"]
+}
+  

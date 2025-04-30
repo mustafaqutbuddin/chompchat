@@ -1,0 +1,46 @@
+{
+    "fried_burgers": [
+      "Zingster - $12.99",
+      "The Doppler - $15.99",
+      "Nashtrill - $13.49",
+      "Cruncho - $17.99"
+    ],
+    "smash_beef": [
+      "Smash Rizz - $13.99",
+      "Thicc Beef - $16.99",
+      "Fire Beef - $13.99",
+      "Monster Meat Munch - $23.99"
+    ],
+    "rice_platter": [
+      "Kickin Chicken Rice - $9.99",
+      "Chunky Rice Delight - $13.99",
+      "Peri Peri Rice Platter - $16.99",
+      "Chicken Tikka Rice - $16.99"
+    ],
+    "fried_chicken_boxes": [
+      "Me Myself And Meal MMM - $14.99",
+      "Solo Delight - $17.99",
+      "Boo-Tiful Boneless - $14.99",
+      "Wingin’ It Wild - $14.99"
+    ],
+    "fried_chicken_feasts": [
+      "Best Bud Box - $29.99",
+      "Double Dose - $36.99",
+      "Squad Box - $63.99",
+      "Fam Jam - $68.99"
+    ],
+    "sides": [
+      "Fries - $4.99",
+      "Onion Rings - $5.99",
+      "Potato Wedges - $6.99",
+      "Poutine - $8.99",
+      "Chicken Poutine - $11.99"
+    ],
+    "ice_cream_shakes": [
+      "Chocolate - $6.99",
+      "Vanilla - $6.99",
+      "Mango - $6.99",
+      "Strawberry - $6.99"
+    ]
+  }
+  

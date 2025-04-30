@@ -1,0 +1,26 @@
+[
+  {
+    "timestamp": "2025-04-30T00:33:04.454067",
+    "from": "+17784440066",
+    "message": "can I get onion rings and coke?",
+    "response": "Of course, your order is Onion Rings for the side and a Coke to drink. Is there anything else you would like to add?"
+  },
+  {
+    "timestamp": "2025-04-30T00:55:24.490180",
+    "from": "+17784440066",
+    "message": "Can I get a Zingster and a Mango shake? ",
+    "response": "Sure, you've ordered a Zingster from our fried burgers selection and a Mango shake from our ice cream shakes. Your total comes to $19.98. Is there anything else I can assist you with?"
+  },
+  {
+    "timestamp": "2025-04-30T04:35:57.199868",
+    "from": "+17784440066",
+    "message": "Can I get a Zingster and a Mango shake? ",
+    "response": "Sure thing! You've ordered a Zingster fried burger and a Mango ice cream shake. That sounds like a tasty choice! Is there anything else you would like to add to your order?"
+  },
+  {
+    "timestamp": "2025-04-30T04:37:20.341012",
+    "from": "+17784440066",
+    "message": "Can I get a Zingster and a Mango shake? ",
+    "response": "Sure thing! I have down one Zingster burger for $12.99 and a delicious Mango shake for $6.99. Is there anything else you would like to add to your order?"
+  }
+]
