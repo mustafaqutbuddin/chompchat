@@ -10,6 +10,7 @@ from voice_agent import router as voice_router
 from utils import save_order, send_order_email
 from fastapi import Request, Header
 from fastapi.responses import JSONResponse
+from call_vapi import router as vapi_router
 import os
 
 import json
@@ -22,6 +23,7 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
 app.include_router(voice_router)
+app.include_router(vapi_router)
 
 ORDERS_FILE = "orders.json"
 
@@ -155,27 +157,3 @@ def send_order_email(from_number, message, reply):
         print("✅ Order email sent")
     except Exception as e:
         print("❌ Failed to send email:", e)
-
-@app.post("/vapi/order")
-async def vapi_order_handler(request: Request, authorization: str = Header(None)):
-    # Optional: Validate Secret Token
-    expected_token = os.getenv("VAPI_SECRET")
-    if expected_token and authorization != f"Bearer {expected_token}":
-        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
-
-    data = await request.json()
-    print("📞 Incoming Vapi payload:", data)
-
-    # Extract latest user message
-    messages = data.get("messages", [])
-    user_input = messages[-1]["content"] if messages else ""
-
-    # Naive order detection for demo
-    if "zingster" in user_input.lower():
-        reply = "Nice pick! One Zingster burger added. Want anything else?"
-    elif "done" in user_input.lower() or "that's it" in user_input.lower():
-        reply = "Awesome! Your order is confirmed. It'll be ready shortly. Thanks!"
-    else:
-        reply = "Got it. What else can I get for you?"
-
-    return {"reply": reply}
